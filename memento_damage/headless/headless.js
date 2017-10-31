@@ -1,4 +1,4 @@
-// Libraries
+// v0.12.0 puppeteer
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -9,12 +9,18 @@ const crypto = require('crypto');
 // }
 
 // url = system.args[1];
-// outputDir = system.args[2];
+var outputDir = process.argv[2] || './test';
 url = 'http://web.archive.org/web/20040208171032/http://www.deviantart.com:80/';
-outputDir = './test';
-// hashedUrl = crypto.createHash('md5').update(url).digest("hex");
+// url = 'https://f-measure.blogspot.com';
+var hashedUrl = crypto.createHash('md5').update(url).digest("hex");
+var networkResources = {};
+var reverseRedirectMapping = {};
+var redirectMapping = {};
+var Log = {'DEBUG': 10, 'INFO': 20};
+var starttime = Date.now();
 
 // REMOVE AFTER TESTING
+console.log("Testing", url);
 if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir);
 }
@@ -22,6 +28,7 @@ if (!fs.existsSync(outputDir)) {
 async function headless(url) {
     const browser = await puppeteer.launch({
         ignoreHTTPSErrors: true,
+        // headless: false,
     });
     const page = await browser.newPage();
 
@@ -34,6 +41,19 @@ async function headless(url) {
     });
 
     try {
+        // track failed responses ~ Security blocks, etc.
+        page.on('requestfailed', request => {
+          if(request.response()){
+              console.log(request.url, request.response().status);
+          }else{
+              console.log(request.url, request.response());
+          }
+        });
+
+        page.on('response', response => {
+          console.log(response.url, response.status, response.headers);
+        });
+
         // stack trace
         await page.tracing.start({
             path: outputDir + '/trace.json',
@@ -45,16 +65,6 @@ async function headless(url) {
             networkIdleTimeout: 3000,
         });
         await page.tracing.stop();
-
-        // Metrics
-        const metrics = await page.getMetrics();
-        console.log(metrics);
-
-        // get all resources ~ does not include response codes
-        const urls = await page.evaluate(() => {
-            return performance.getEntries();
-        });
-        console.log(urls);
 
         // Take screenshots
         await page.screenshot({
@@ -87,5 +97,3 @@ headless(url).then(v => {
     // Once all the async parts finish this prints.
     console.log("Finished Headless");
 });
-
-console.log("This executes first");
